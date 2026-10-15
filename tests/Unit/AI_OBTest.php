@@ -381,4 +381,25 @@ final class AI_OBTest extends TestCase
         $method = new \ReflectionMethod(AI_OB::class, 'post_process_cached_content');
         return (string) $method->invoke(AI_OB::instance(), $html, $source);
     }
+
+    public function test_cached_menu_reuses_current_wordpress_stylesheets_without_changing_translation(): void
+    {
+        Functions\when('is_admin_bar_showing')->justReturn(false);
+        $cached = '<html><head><link rel="stylesheet" id="old-menu-css" href="/removed.css"><style>.hero{color:blue}</style></head><body><nav>Preise</nav><main>Übersetzter Inhalt</main></body></html>';
+        $source = "<html><head><link id='base-css' rel='stylesheet' href='/base.css?ver=2'><link rel='stylesheet' id='new-menu-css' href='/menu.css?ver=2'></head><body><nav>Pricing</nav></body></html>";
+        $result = $this->postProcessCached($cached, $source);
+        $this->assertStringNotContainsString('/removed.css', $result);
+        $this->assertStringContainsString("href='/menu.css?ver=2'", $result);
+        $this->assertLessThan(strpos($result, "id='new-menu-css'"), strpos($result, "id='base-css'"));
+        $this->assertStringContainsString('<style>.hero{color:blue}</style>', $result);
+        $this->assertStringContainsString('<nav>Preise</nav><main>Übersetzter Inhalt</main>', $result);
+        $this->assertSame(1, substr_count($result, "id='new-menu-css'"));
+    }
+
+    public function test_missing_source_stylesheets_leave_cached_assets_unchanged(): void
+    {
+        Functions\when('is_admin_bar_showing')->justReturn(false);
+        $cached = '<html><head><link rel="stylesheet" id="menu-css" href="/menu.css"></head><body>Inhalt</body></html>';
+        $this->assertSame($cached, $this->postProcessCached($cached, '<html><head></head><body></body></html>'));
+    }
 }

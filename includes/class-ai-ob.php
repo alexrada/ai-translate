@@ -48,6 +48,9 @@ final class AI_OB
      */
     private function post_process_cached_content($html, $source_html = '')
     {
+        // Translations may outlive theme/plugin updates. Reuse WordPress's current
+        // stylesheet output rather than retaining obsolete menu/widget assets.
+        $html = self::refresh_cached_stylesheets($html, (string) $source_html);
         // Check if current user should see admin bar
         $should_show_admin_bar = function_exists('is_admin_bar_showing') && is_admin_bar_showing();
 
@@ -100,6 +103,25 @@ final class AI_OB
         }
 
         return $html;
+    }
+
+    /** Refresh only enqueued stylesheet tags; leave translated markup untouched. */
+    private static function refresh_cached_stylesheets(string $html, string $source_html): string
+    {
+        $pattern = '/<link\b(?=[^>]*\brel=["\']stylesheet["\'])(?=[^>]*\bid=["\'][^"\']+-css["\'])[^>]*>/i';
+        if (!preg_match_all($pattern, $source_html, $styles) || stripos($html, '</head>') === false) {
+            return $html;
+        }
+        $replacement = implode("\n", $styles[0]);
+        $inserted = false;
+        $html = preg_replace_callback($pattern, static function () use (&$inserted, $replacement) {
+            if ($inserted) {
+                return '';
+            }
+            $inserted = true;
+            return $replacement;
+        }, $html);
+        return $inserted ? $html : preg_replace('/<\/head>/i', $replacement . "\n</head>", $html, 1);
     }
 
     /**
